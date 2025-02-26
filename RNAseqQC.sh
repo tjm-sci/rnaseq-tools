@@ -1,22 +1,23 @@
 #!/bin/bash
 
-# This script takes an input directory containing FASTQ files and runs FastQC on each file.
+# This program takes an input directory containing FASTQ files and runs FastQC on each file.
 # Results from FastQC are then stored in a user-specified output directory.
 # A MutliQC report is generated from the FastQC results and stored in the output directory.
 
 help(){
     echo ""
-    echo "Wrapper script for running FastQC on fastq.gz files genrated by Illumina paired-end seqeuncing"
+    echo "Wrapper for running FastQC on fastq.gz files genrated by Illumina paired-end seqeuncing"
     echo "Generates a MultiQC report from the FastQC results"
     echo ""
-    echo "Warning: Docker must be installed and set up correctly to run this script"
+    echo "FastQC and MultiQC are run in Docker containers"
+    echo "Warning: Docker must be installed and set up correctly to run this program"
     echo ""
     echo "Usage: $0 --fastq <fastq_directory> --output <output_directory>"
     echo ""
     echo "Options:"
-    echo "  --fastq         Path to directory containing FASTQ files (paired-end; _R1.fastq and _R2.fastq)"
-    echo "  --output, -o    Path to directory where QC reports will be stored"
-    echo "  --help, -h      Display this help message and exit"
+    echo "  --fastq,  -f   Path to FASTQ directory (paired-end; *_R1*.fastq and *_R2*.fastq)"
+    echo "  --output, -o   Path to directory where QC reports will be stored"
+    echo "  --help,   -h   Display this help message and exit"
 }
 
 # if no parameters are provided to the command line, print the help dialgoue
