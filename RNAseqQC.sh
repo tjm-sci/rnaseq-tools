@@ -38,7 +38,7 @@ output_dir=""
 
 while [[ "$#" -gt 0 ]]; do
     case $1 in
-        --fastq)
+        --fastq|-f)
             fastq_dir="$2"
             echo "fastq_dir: $fastq_dir"
             shift 2
@@ -129,7 +129,10 @@ docker pull $MULTIQC_DOCKER_IMAGE
 # Generate a MultiQC report from the FastQC outputs
 report_name="$(date +%Y%m%d)_mutliqc_report.html"
 
-docker run --rm -u "$(id -u):$(id -g)" \
+# we specify the output directory as the data directory
+# this should mean that multiqc has write permissions
+docker run --rm \
+  -u "$(id -u):$(id -g)" \
   -v "$(realpath "$output_dir")":/data \
   $MULTIQC_DOCKER_IMAGE \
-  multiqc -n "$report_name" /data
+  multiqc -n "$report_name" -o /data /data
