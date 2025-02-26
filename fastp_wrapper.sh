@@ -95,9 +95,8 @@ for r1 in "${fastq_dir}"/*_R1*.fastq*; do
     out1="${output_dir}/${base1%%.fastq*}_trimmed.fastq.gz"
     out2="${output_dir}/${base2%%.fastq*}_trimmed.fastq.gz"
 
-    # Set report names (HTML and JSON) based on the R1 file name.
+    # Set report names (HTML) based on the R1 file name.
     html_report="${output_dir}/${base1%%.fastq*}_fastp.html"
-
 
     # Run fastp in Docker.
     FASTP_IMAGE="staphb/fastp:latest"
