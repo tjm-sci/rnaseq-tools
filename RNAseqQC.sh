@@ -1,4 +1,5 @@
 #!/bin/bash
+
 # This script takes an input directory containing FASTQ files and runs FastQC on each file.
 # Results from FastQC are then stored in a user-specified output directory.
 # A MutliQC report is generated from the FastQC results and stored in the output directory.
@@ -108,7 +109,7 @@ for r1 in "${fastq_dir}"/*_R1*.fastq*; do
 
         # Run FastQC using Docker:
         docker run --rm \
-          -u "$(id -u):$(id -g)" \  # ensures output files are owned by the current user
+          -u "$(id -u):$(id -g)" \
           -v "$(realpath "$fastq_dir")":/data/input \
           -v "$(realpath "$output_dir")":/data/output \
           $FASTQC_DOCKER_IMAGE \
