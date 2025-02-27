@@ -1,83 +1,85 @@
 #!/bin/bash
+# fastp_config_wrapper.sh
+# This script runs fastp in a Docker container on paired-end FASTQ files.
+# It requires a configuration file (supplied with --config) that exports:
+#   FASTQ_DIR, FASTP_OUTPUT_DIR, FASTP_REPORT_DIR, THREADS, and OUTPUT_SUFFIX.
+#
+# Usage:
+#   ./fastp_config_wrapper.sh --config <config_file>
+#
+# The script processes paired FASTQ files, outputs trimmed files with the OUTPUT_SUFFIX
+# appended to the base filename, and generates HTML and JSON reports with a date prefix.
 
-# Usage function
-usage() {
-    echo "This is a wrapper script for fastp processing of paired end Illumina reads."
-    echo "The script takes an input directory containing FASTQ files and runs fastp on each pair."
-    echo "Results from fastp are stored in a user-specified output directory."
+help() {
     echo ""
-    echo "fastp is run in a Docker container."
-    echo "Warning: Docker must be installed and set up correctly to run this program."
+    echo "Usage: $0 --config <config_file>"
     echo ""
-    echo "Usage: $0 --fastq <input_fastq_directory> --output <output_directory> --threads <number_of_threads>"
-    echo
-    
+    echo "The config file must export the following variables:"
+    echo "  FASTQ_DIR           Path to raw FASTQ input directory"
+    echo "  FASTP_OUTPUT_DIR    Directory for trimmed FASTQ output files"
+    echo "  FASTP_REPORT_DIR    Directory for fastp HTML and JSON reports"
+    echo "  THREADS             Number of threads to use"
+    echo "  OUTPUT_SUFFIX       Suffix to append to output FASTQ filenames (e.g. _trimmed)"
+    echo ""
 }
 
-# Check for no arguments
-if [ "$#" -eq 0 ]; then
-    usage
+# Validate command-line arguments.
+if [ "$#" -ne 2 ]; then
+    help
     exit 1
 fi
 
-# Initialize variables
-fastq_dir=""
-output_dir=""
-threads=""
-
-# Parse command-line arguments
-while [[ "$#" -gt 0 ]]; do
-    case $1 in
-        --fastq|-f)
-            fastq_dir="$2"
-            shift 2
-            ;;
-        --output|-o)
-            output_dir="$2"
-            shift 2
-            ;;
-        --threads |-t)
-            threads="$2"
-            shift 2
-            ;;
-        --help|-h)
-            usage
-            exit 0
-            ;;
-        *)
-            echo "Unknown option: $1"
-            usage
-            exit 1
-            ;;
-    esac
-done
-
-# Validate required arguments
-if [ -z "$fastq_dir" ] || [ -z "$output_dir" ] || [ -z "$threads" ]; then
-    echo "Error: --fastq, --output, and --threads must all be specified."
-    usage
+if [ "$1" != "--config" ]; then
+    help
     exit 1
 fi
 
-# Check that input directory exists
-if [ ! -d "$fastq_dir" ]; then
-    echo "Error: Input directory '$fastq_dir' does not exist."
+CONFIG_FILE="$2"
+if [ ! -f "$CONFIG_FILE" ]; then
+    echo "Error: Config file '$CONFIG_FILE' not found."
     exit 1
 fi
 
-# Create output directory if it doesn't exist
-if [ ! -d "$output_dir" ]; then
-    echo "Output directory '$output_dir' does not exist."
-    echo "Creating output directory..."
-    mkdir -p "$output_dir"
+echo "Sourcing configuration from $CONFIG_FILE..."
+source "$CONFIG_FILE"
+
+# Validate that required environment variables are set.
+if [ -z "$FASTQ_DIR" ] || [ -z "$FASTP_OUTPUT_DIR" ] || [ -z "$FASTP_REPORT_DIR" ] || [ -z "$THREADS" ] || [ -z "$OUTPUT_SUFFIX" ]; then
+    echo "Error: Config file must export FASTQ_DIR, FASTP_OUTPUT_DIR, FASTP_REPORT_DIR, THREADS, and OUTPUT_SUFFIX."
+    exit 1
 fi
 
-# Loop through FASTQ files in the input directory matching a flexible _R1 pattern
-for r1 in "${fastq_dir}"/*_R1*.fastq*; do
-    # Construct the corresponding R2 filename by replacing the first occurrence of _R1 with _R2
+# Check that the input FASTQ directory exists.
+if [ ! -d "$FASTQ_DIR" ]; then
+    echo "Error: FASTQ_DIR '$FASTQ_DIR' does not exist."
+    exit 1
+fi
+
+# Create the output directories 
+# fastp processed fastq
+if [ ! -d "$FASTP_OUTPUT_DIR" ]; then
+    mkdir -p "$FASTP_OUTPUT_DIR"
+fi
+# fastp reports
+if [ ! -d "$FASTP_REPORT_DIR" ]; then
+    mkdir -p "$FASTP_REPORT_DIR"
+fi
+# fastp json reports
+if [ ! -d "${FASTP_REPORT_DIR}/json" ]; then
+    mkdir -p "${FASTP_REPORT_DIR}/json"
+fi
+
+# Pull the fastp Docker image.
+FASTP_IMAGE="staphb/fastp:latest"
+docker pull $FASTP_IMAGE
+
+# Define a date prefix (yy-mm-dd) for our filenames.
+date_prefix=$(date +%y-%m-%d)
+
+# Process each paired FASTQ file in the input directory.
+for r1 in "${FASTQ_DIR}"/*_R1*.fastq*; do
+    # Construct the corresponding R2 filename.
     r2="${r1/_R1/_R2}"
-    
-    # Check if the paired R2 file exists; if not, skip this pair
     if [ ! -f "$r2" ]; then
         echo "Warning: Paired file for $r1 not found. Skipping."
         continue
@@ -86,43 +88,33 @@ for r1 in "${fastq_dir}"/*_R1*.fastq*; do
     echo "Processing paired files:"
     echo "  R1: $r1"
     echo "  R2: $r2"
-
-    # Extract just the base filenames (so that inside the container we refer to /data/input/<filename>)
+    # extract the base filename from path
     base1=$(basename "$r1")
     base2=$(basename "$r2")
 
-    # Create output filenames by removing the .fastq* extension and appending _trimmed.fastq.gz.
-    out1="${output_dir}/${base1%%.fastq*}_trimmed.fastq.gz"
-    out2="${output_dir}/${base2%%.fastq*}_trimmed.fastq.gz"
+    # Build output filenames by removing the .fastq* extension and appending OUTPUT_SUFFIX.
+    out1="${FASTP_OUTPUT_DIR}/${base1%%.fastq*}${OUTPUT_SUFFIX}.fastq.gz"
+    out2="${FASTP_OUTPUT_DIR}/${base2%%.fastq*}${OUTPUT_SUFFIX}.fastq.gz"
 
-    # Set report names (HTML) based on the R1 file name.
-    html_report="${output_dir}/${base1%%.fastq*}_fastp.html"
+    # Build report filenames with the date prefix.
+    html_report="${FASTP_REPORT_DIR}/${date_prefix}_${base1%%.fastq*}_fastp.html"
+    json_report="${FASTP_REPORT_DIR}/json/${date_prefix}_${base1%%.fastq*}_fastp.json"
 
-    # Run fastp in Docker.
-    FASTP_IMAGE="staphb/fastp:latest"
-    # - Mount the input directory to /data/input and the output directory to /data/output.
-    # - Run as the current user to avoid permission issues.
-    # - adapters should be automatically detected.
-    # - Pass the fastp options:
-    #    - -i and -I point to the input files (inside /data/input)
-    #    - -o and -O are the output files (inside /data/output)
-    #    - -q 30 sets the qualified quality threshold to Q30
-    #    - -x enables polyX trimming
-    #    - -w uses the user-specified number of threads
-    #    - --html generates report in the output directory
     docker run --rm \
       -u "$(id -u):$(id -g)" \
-      -v "$(realpath "$fastq_dir")":/data/input \
-      -v "$(realpath "$output_dir")":/data/output \
+      -v "$(realpath "$FASTQ_DIR")":/data/input \
+      -v "$(realpath "$FASTP_OUTPUT_DIR")":/data/fastq_output \
+      -v "$(realpath "$FASTP_REPORT_DIR")":/data/reports \
       $FASTP_IMAGE fastp \
-      -i /data/input/"$base1" -o /data/output/"$(basename "$out1")" \
-      -I /data/input/"$base2" -O /data/output/"$(basename "$out2")" \
+      -i /data/input/"$base1" -o /data/fastq_output/"$(basename "$out1")" \
+      -I /data/input/"$base2" -O /data/fastq_output/"$(basename "$out2")" \
       -q 30 \
       -x \
-      -w "$threads" \
-      --html /data/output/"$(basename "$html_report")"
-      
-
+      -p \
+      -w "$THREADS" \
+      --detect_adapter_for_pe \
+      --html /data/reports/"$(basename "$html_report")" \
+      --json /data/reports/json/"$(basename "$json_report")"
 done
 
 echo "fastp processing completed."
