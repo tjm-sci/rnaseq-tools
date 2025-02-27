@@ -41,6 +41,7 @@ if [ ! -f "$CONFIG_FILE" ]; then
 fi
 
 echo "Sourcing configuration from $CONFIG_FILE..."
+# shellcheck source=/home/tmurphy/phd_work/FANS_PILOT_DEV/fastp_config_tom.sh
 source "$CONFIG_FILE"
 
 # Validate that required environment variables are set.
