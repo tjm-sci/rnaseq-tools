@@ -4,3 +4,4 @@ qc
 fastqc_untrimmed
 fastp_config_tom.sh
 RNAseqQC_config_tom.sh
+reference_seqs
