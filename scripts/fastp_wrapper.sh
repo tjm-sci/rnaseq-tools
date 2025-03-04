@@ -23,6 +23,9 @@ help() {
     echo ""
 }
 
+# this stops the script if any command fails 
+set -euo pipefail
+
 # Validate command-line arguments.
 if [ "$#" -ne 2 ]; then
     help

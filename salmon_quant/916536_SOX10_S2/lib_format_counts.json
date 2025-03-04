@@ -1,0 +1,22 @@
+{
+    "read_files": "[ /home/tmurphy/phd_work/FANS_PILOT_DEV/qc/fastp_testing/second_fastp_attempt_fastq/916536_SOX10_S2_R1_001_trimmed_v2.fastq.gz, /home/tmurphy/phd_work/FANS_PILOT_DEV/qc/fastp_testing/second_fastp_attempt_fastq/916536_SOX10_S2_R2_001_trimmed_v2.fastq.gz]",
+    "expected_format": "ISR",
+    "compatible_fragment_ratio": 1.0,
+    "num_compatible_fragments": 10481829,
+    "num_assigned_fragments": 10481829,
+    "num_frags_with_concordant_consistent_mappings": 10412320,
+    "num_frags_with_inconsistent_or_orphan_mappings": 71403,
+    "strand_mapping_bias": 0.00009247803982663296,
+    "MSF": 0,
+    "OSF": 0,
+    "ISF": 963,
+    "MSR": 0,
+    "OSR": 0,
+    "ISR": 10412320,
+    "SF": 36675,
+    "SR": 33765,
+    "MU": 0,
+    "OU": 0,
+    "IU": 0,
+    "U": 0
+}

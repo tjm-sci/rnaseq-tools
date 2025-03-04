@@ -5,3 +5,6 @@ fastqc_untrimmed
 fastp_config_tom.sh
 RNAseqQC_config_tom.sh
 reference_seqs
+scripts/salmon_config_tom.sh
+salmon_quant/
+salmon_quant/

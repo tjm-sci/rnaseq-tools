@@ -1,0 +1,13 @@
+{
+    "salmon_version": "1.10.3",
+    "index": "/home/tmurphy/phd_work/FANS_PILOT_DEV/reference_seqs/salmon_index",
+    "libType": "A",
+    "mates1": "/home/tmurphy/phd_work/FANS_PILOT_DEV/qc/fastp_testing/second_fastp_attempt_fastq/916536_PU1_S4_R1_001_trimmed_v2.fastq.gz",
+    "mates2": "/home/tmurphy/phd_work/FANS_PILOT_DEV/qc/fastp_testing/second_fastp_attempt_fastq/916536_PU1_S4_R2_001_trimmed_v2.fastq.gz",
+    "validateMappings": [],
+    "seqBias": [],
+    "gcBias": [],
+    "threads": "18",
+    "output": "/home/tmurphy/phd_work/FANS_PILOT_DEV/salmon_quant/916536_PU1_S4",
+    "auxDir": "aux_info"
+}

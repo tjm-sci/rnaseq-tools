@@ -10,6 +10,9 @@ export FASTQ_DIR="/path/to/raw_fastq"
 # directory for the fastqc html reports
 export FASTQC_REPORT_DIR="/path/to/fastqc_reports"
 
+# how many threads fastqc should use
+export THREADS=8
+
 # directories multiqc will search for reports to aggregate. 
 # If left empty, FASTQC_REPORT_DIR is used
 export MULTIQC_SEARCH_DIRS="/path/to/fastqc_reports /another/path/to/reports"

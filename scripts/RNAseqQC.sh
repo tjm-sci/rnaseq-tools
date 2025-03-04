@@ -28,6 +28,9 @@ help() {
     echo ""
 }
 
+# this stops the script if any command fails 
+set -euo pipefail
+
 # Validate command-line arguments.
 if [ "$#" -ne 2 ]; then
     help
@@ -110,7 +113,7 @@ else
           -v "$(realpath "$FASTQ_DIR")":/data/input \
           -v "$(realpath "$FASTQC_REPORT_DIR")":/data/output \
           $FASTQC_DOCKER_IMAGE \
-          fastqc /data/input/"$base1" /data/input/"$base2" --outdir /data/output
+          fastqc /data/input/"$base1" /data/input/"$base2" -t $THREADS --outdir /data/output 
     done
     echo ""
     echo "FastQC processing completed."
