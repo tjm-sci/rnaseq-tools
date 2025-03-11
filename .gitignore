@@ -7,3 +7,6 @@ RNAseqQC_config_tom.sh
 reference_seqs
 scripts/salmon_config_tom.sh
 salmon_quant/
+.Rproj.user
+fans_pilot_raw_counts.csv
+*.Rproj
