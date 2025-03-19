@@ -4,26 +4,19 @@
 # Author: T. Murphy
 # Date: 2025-03-04
 
-# install & load required libraries. 
+# load required libraries. 
 if (!require("BiocManager", quietly = TRUE))
   install.packages("BiocManager")
-
-BiocManager::install("tximport")
-BiocManager::install("ensembldb")
-BiocManager::install("AnnotationHub")
-BiocManager::install("edgeR")
-BiocManager::install("ComplexHeatmap")
-BiocManager::install("Glimma")
 
 library(tximport)
 library(AnnotationHub)
 library(ensembldb)
 library(stringr)
-library(dplyr)
 library(RColorBrewer)
 library(edgeR)
 library(Glimma)
 library(ComplexHeatmap)
+library(EnhancedVolcano)
 
 
 ### Getting annotation data from AnnotationHub ###
@@ -152,18 +145,12 @@ norm_mat <- log(norm_mat)
 y <- y_raw
 y <- scaleOffset(y, norm_mat) 
 
-# specify design matrix where each type of nuclei is represented as a column
-# and technical explanatory variables are included.
-design.mat <- model.matrix(~0 + nuc_type + animal_no + extraction_batch,
-                           data = sample_meta)
-
-colnames(design.mat) <- gsub("nuc_type", "", colnames(design.mat))
-
-
 
 ##################
 ### plotting 1 ###
 ##################
+
+dir.create("./plots")
 
 # plotting library sizes
 lib_size_plt <- function(lib_sizes, y_range, title){
@@ -184,21 +171,30 @@ raw_libs <- colSums(y_raw$counts)
 
 # make both plots with same y axis
 y_range <- c(0, 1.4e7)
-lib_size_plt(raw_libs, y_range, title = "Raw library sizes")
-lib_size_plt(eff_lib, y_range, title = "Effective library sizes")
 
+png("plots/raw_library_sizes.png", width=2000, height=3000,  res=300)
+lib_size_plt(raw_libs, y_range, title = "Raw library sizes")
+dev.off()
+
+png("plots/eff_library_sizes.png", width = 2000, height = 3000, res =  300)
+lib_size_plt(eff_lib, y_range, title = "Effective library sizes")
+dev.off()
 
 
 # correlations between samples
-sample_heatmap <- function(){
+
+# heatmap of correlation coefficients
+sample_heatmap <- function(y){
   corr <- cor(y$counts)
   pheatmap(corr)
 }
 
+png("raw_library_sizes.png", width = 3000, height = 2500, res=300)
 sample_heatmap()
+dev.off()
 
 # MDS plot function
-mds_plot <- function(){
+mds_plot <- function(y, method="logFC"){
 
   
   # Define colours for each type of our types
@@ -212,6 +208,7 @@ mds_plot <- function(){
                   bg = nuc_colors,
                   pch = 21,
                   cex = 1.5,
+                  method = method,
                   main = "MDS plot of libraries from disitnct nuclei populations", labels = NULL)
 
   # Add a legend in the top right
@@ -223,16 +220,72 @@ mds_plot <- function(){
          title = "Nuclear Type")
 }
 
-mds_plot()
+mds_plot(y)
 
-### EdgeR model fitting ###
+
+#########################
+### EdgeR: processing ###
+#########################
+
+# low count filtering
 
 # filter out lowly expressed genes
 keep <-filterByExpr(y, group = y$samples$nuc_type)
 table(keep)
+y <- y[keep, ]
 
-# pre-filtering lib sizes are retained as the offset matrix was based on them
-y <- y[keep, , keep.lib.sizes = TRUE]
+# Dispersion estimation & model fitting 
 
-# estimate dispersion
+# specify design matrix where each type of nuclei is represented as a column
+design.mat <- model.matrix(~0 + nuc_type + animal_no, data = sample_meta)
+colnames(design.mat) <- gsub("nuc_type", "", colnames(design.mat))
+
+# estimate dispersion parameters 
 y <- estimateDisp(y, design.mat)
+
+# fit gene-wise quasi negative binomial models
+fit <- glmQLFit(y, design = design.mat)
+
+#### DE testing with quasi-liklihood F-tests ###
+# We compare expression of one nuc_type versus the avg of the others
+
+nuc.contrasts <- makeContrasts(
+  NeuNvsAvg = NeuN - (PU1+SOX10+SOX2)/3,
+  PU1vsAvg = PU1 -(NeuN+SOX10+SOX2)/3,
+  SOX10vsAvg = SOX10 -(NeuN+PU1+SOX2)/3,
+  SOX2vsAvg = SOX2 - (NeuN+PU1+SOX10)/3,
+  levels = design.mat
+  )
+
+qlf.NeuN <- glmQLFTest(fit, contrast = nuc.contrasts[,"NeuNvsAvg"])
+topTags(qlf.NeuN)
+
+qlf.PU1 <- glmQLFTest(fit, contrast = nuc.contrasts[, "PU1vsAvg"])
+topTags(qlf.PU1)
+
+qlf.SOX10 <- glmQLFTest(fit, contrast = nuc.contrasts[, "SOX10vsAvg"] )
+topTags(qlf.SOX10)
+
+qlf.SOX2 <- glmQLFTest(fit, contrast = nuc.contrasts[, "SOX2vsAvg"])
+topTags(qlf.SOX2)
+
+#################################
+### Plotting 2: Volcano plots ###
+#################################
+
+plot_volcano <- function(DEgenes_df){
+  # Depends on enhanced volcano package
+  # configured to work with ouput from EdgeR's qlfTest function
+  # Will return the plot as an object with the name taken from the first part
+  # of the object supplied to the function. 
+  
+  plt <- EnhancedVolcano(DEgenes_df,
+                  lab = rownames(DEgenes_df),
+                  x = "logFC",
+                  y = "PValue")
+  
+  return(plt)
+}
+
+NeuN_genes <- data.frame(qlf.NeuN$table)
+NeuN_volcano <- plot_volcano(NeuN_genes)
