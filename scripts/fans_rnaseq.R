@@ -20,6 +20,9 @@ library(openxlsx)
 library(ggplot2)
 library(ggrepel)
 
+# source functions.R
+source("./scripts/functions.R")
+
 #######################################################
 ### Create mapping between transcript IDs & gene IDs ##
 #######################################################
@@ -124,6 +127,7 @@ sample_meta$extraction_batch <- as.factor(sample_meta$extraction_batch)
 
 # create the raw count matrix 
 fans_counts <- txi$counts
+rownames(fans_counts) <- make.unique(rownames(fans_counts))
 y_raw <- DGEList(fans_counts)
 write.csv(fans_counts, "fans_pilot_raw_counts.csv")
 
@@ -151,25 +155,11 @@ y <- y_raw
 y <- scaleOffset(y, norm_mat) 
 
 
-##################
-### plotting 1 ###
-##################
+#########################
+### Exploratory plots ###
+#########################
 
 dir.create("./plots")
-
-# plotting library sizes
-lib_size_plt <- function(lib_sizes, y_range, title){
-  
-  par(mar = c(8, 6, 4, 2), mgp = c(5, 1, 0)) # set margins: bottom, left, top, right
-  
-  barplot(lib_sizes,
-          main = title,
-          las = 2,
-          xlab = NULL,
-          ylim = y_range,
-          ylab = "Library Size")
-
-}
 
 # store raw library sizes
 raw_libs <- colSums(y_raw$counts)
@@ -177,57 +167,23 @@ raw_libs <- colSums(y_raw$counts)
 # make both plots with same y axis
 y_range <- c(0, 1.4e7)
 
+# raw lib sizes
 png("plots/raw_library_sizes.png", width=2000, height=3000,  res=300)
 lib_size_plt(raw_libs, y_range, title = "Raw library sizes")
 dev.off()
 
+# effective library sizes
 png("plots/eff_library_sizes.png", width = 2000, height = 3000, res =  300)
 lib_size_plt(eff_lib, y_range, title = "Effective library sizes")
 dev.off()
 
-
-# correlations between samples
-
-sample_heatmap <- function(y){
-  # heatmap of correlation coefficients
-  corr <- cor(y$counts)
-  pheatmap(corr)
-}
-
+# heatmap
 png("plots/sample_heatmap.png", width = 3000, height = 2500, res=300)
 sample_heatmap(y)
 dev.off()
 
-# MDS plot function
-mds_plot <- function(y){
-  
-  # wrapper function for EdgeR's plotMDS with nice
-  # formatting for different types of nuclei 
-  
-  # Define colours for each type of our types
-  dark_cols <- brewer.pal(4, "Dark2")
-  nuc_types <- levels(as.factor(y$samples$nuc_type))
-  nuc_colors <- setNames(dark_cols, nuc_types)
 
-  
-  # Plot the MDS using coloured points (pch=16 for solid circles) 
-  plotMDS.DGEList(y,
-                  bg = nuc_colors,
-                  pch = 21,
-                  cex = 1.5,
-                  method = "logFC",
-                  main = "MDS plot of libraries from disitnct nuclei populations", labels = NULL)
-
-  # Add a legend in the bottom right
-  legend("bottomright",
-         legend = nuc_types,
-         pt.bg = nuc_colors,
-         pch = 21,
-         cex = 1.5,
-         title = "Nuclear Type")
-}
-
-mds <- mds_plot(y)
+# mds plot with customized aesthetics
 png("plots/MDSplot.png", width=2000, height = 2000, res = 300)
 mds_plot(y)
 dev.off()
@@ -236,8 +192,6 @@ dev.off()
 #########################
 ### EdgeR: processing ###
 #########################
-
-# low count filtering
 
 # filter out lowly expressed genes
 keep <-filterByExpr(y, group = y$samples$nuc_type)
@@ -252,7 +206,7 @@ colnames(design.mat) <- gsub("nuc_type", "", colnames(design.mat))
 
 # estimate dispersion parameters 
 y <- estimateDisp(y, design.mat)
-y$
+
 # fit gene-wise quasi negative binomial models
 fit <- glmQLFit(y, design = design.mat)
 
@@ -273,190 +227,80 @@ nuc.contrasts <- makeContrasts(
 ################################################
 
 # these tests use a null hypothesis that DE is absent i.e. 0 FC
-
 qlf.NeuN <- glmQLFTest(fit, contrast = nuc.contrasts[,"NeuNvsAvg"])
-topTags(qlf.NeuN)
 qlf.PU1 <- glmQLFTest(fit, contrast = nuc.contrasts[, "PU1vsAvg"])
-topTags(qlf.PU1)
 qlf.SOX10 <- glmQLFTest(fit, contrast = nuc.contrasts[, "SOX10vsAvg"] )
-topTags(qlf.SOX10)
 qlf.SOX2 <- glmQLFTest(fit, contrast = nuc.contrasts[, "SOX2vsAvg"])
-topTags(qlf.SOX2)
 
 ###########################
 ### DE testing glmTreat ###
 ###########################
 
-# these examine if expresion is signficantly different to a threshold ###
+# these examine if expression is signficantly different to a threshold 
 
 treat.NeuN <- glmTreat(fit, contrast = nuc.contrasts[,"NeuNvsAvg"], lfc = log2(1.2))
-topTags(treat.NeuN)
 treat.PU1 <- glmTreat(fit, contrast = nuc.contrasts[,"PU1vsAvg"], lfc = log2(1.2))
-topTags(treat.PU1)
 treat.SOX10 <- glmTreat(fit, contrast = nuc.contrasts[,"SOX10vsAvg"], lfc = log2(1.2))
-topTags(treat.SOX10)
 treat.SOX2 <- glmTreat(fit, contrast = nuc.contrasts[,"SOX2vsAvg"], lfc = log2(1.2))
-topTags(treat.SOX2)
 
 #########################################
-### Enhanced Volcano Plot ###
+###  generation of volcano plots ###
 #########################################
-
-
-PlotVolcano <- function(DEgenes_df, title = ""){
-  # DEgenes_df: data frame of differential expression results (e.g., from edgeR),
-  # Create a vector of marker genes (the union of all marker lists) to emphasize with labels.
-  select_labels <- unique(unlist(markers))
-  
-  # Create the base volcano plot using EnhancedVolcano (with its default point colors).
-  plt <- EnhancedVolcano(
-    DEgenes_df,
-    lab = DEgenes_df$gene,
-    x = "logFC",
-    y = "PValue",
-    title = title,
-    pointSize = 0.75,
-    subtitle = NULL,
-    boxedLabels = TRUE,
-    drawConnectors = TRUE,
-    widthConnectors = 0.75,
-    legendPosition = "right",
-    selectLab = select_labels
-  )
-  
-  print(plt)
-  return(plt)
-}
-
-#################################################################
-### Custom Function for plotting marker genes on Volcano Plot ###
-#################################################################
-
-MarkerGeneVolcano <- function(DEgenes_df, markers, title = ""){
-  # DEgenes_df: data frame of DE results (e.g., from edgeR)
-  #            Must contain columns "logFC" and "PValue" and have rownames as gene symbols.
-  # markers: a named list of marker gene vectors, one element per cell type,
-  #          e.g. list(neurons = c("Rbfox3", "Eno2", "Nefl", "Snap25")...)
-  # title: Plot title
-  
-  # Store gene names in a column
-  DEgenes_df$gene <- rownames(DEgenes_df)
-  
-  # Create a new column for cell type annotation, defaulting to NA.
-  DEgenes_df$cellType <- NA
-  
-  # Loop over the markers list and assign cell type label for genes found in each marker vector.
-  for(ct in names(markers)){
-    DEgenes_df$cellType[DEgenes_df$gene %in% markers[[ct]]] <- ct
-  }
-  
-  # Make cellType a factor and specify levels to match colouring with other plots
-  DEgenes_df$cellType <- factor(DEgenes_df$cellType, levels = names(markers))
-  
-  # Create a vector of marker genes (the union of all marker lists) to emphasize with labels.
-  select_labels <- unique(unlist(markers))
-  
-  # Create the base volcano plot with EnhancedVolcano (using its default label placement).
-  plt <- EnhancedVolcano(
-    DEgenes_df,
-    lab = DEgenes_df$gene,
-    x = "logFC",
-    y = "PValue",
-    title = title,
-    pointSize = 0.75,
-    subtitle = NULL,
-    boxedLabels = TRUE,
-    drawConnectors = TRUE,
-    widthConnectors = 0.75,
-    col = 'grey50',
-    legendPosition = 'top',
-    selectLab = select_labels
-  )
-  
-  # Remove the default ggrepel label layer added by EnhancedVolcano.
-  # (We assume it is the first layer that is a GeomTextRepel or GeomLabelRepel.)
-  plt$layers <- plt$layers[!sapply(plt$layers, function(layer) {
-    inherits(layer$geom, "GeomTextRepel") || inherits(layer$geom, "GeomLabelRepel")
-  })]
-  
- 
-  # Overlay an additional point layer for marker genes.
-  # Using shape 21 (a filled circle with a border) so that the border is black
-  # and the fill is based on cell type.
-  marker_data <- subset(DEgenes_df, !is.na(cellType))
-  plt <- plt +
-    geom_point(data = marker_data,
-               aes(x = logFC, y = -log10(PValue), fill = cellType),
-               size = 4, shape = 21, color = "black", stroke = 1.5, show.legend = TRUE)
-  
-  # Assign one color per cell type using a palette (using Dark2).
-  cell_types <- names(markers)
-  if(length(cell_types) <= 8){
-    ctcols <- setNames(brewer.pal(n = length(cell_types), name = "Dark2"), cell_types)
-  } else {
-    ctcols <- setNames(colorRampPalette(brewer.pal(8, "Dark2"))(length(cell_types)), cell_types)
-  }
-  
-  # Add a manual fill scale for the marker overlay that creates a legend for cell types.
-  plt <- plt +
-    scale_fill_manual(
-      name = "Cell Type",
-      values = ctcols,
-      guide = guide_legend(override.aes = list(shape = 21, size = 4, stroke = 1.5))
-    ) +
-    theme(legend.position = "right")
-  
-  # remove the deault legend created by Enhanced Volcano plot
-  plt <- plt + guides(color = "none", shape = "none", size = "none")
-  
-  # Add a new label layer.
-  plt <- plt +
-    geom_label_repel(
-      data = subset(DEgenes_df, gene %in% select_labels),
-      aes(x = logFC, y = -log10(PValue), label = gene),
-      #nudge_x = 1,         # increase horizontal distance
-      #nudge_y = 1,       # increase vertical distance 
-      direction = 'both',
-      box.padding = 0.75,
-      point.padding = 1,
-      segment.color = "black",
-      force = 2,
-      max.overlaps = Inf
-    )
-  
-  print(plt)
-  return(plt)
-}
-
-##########################################
-### Define marker genes and make plots ###
-##########################################
-
-# vectors of canonical marker genes for each cell type
-NeuN_mg <- c("Rbfox3", "Eno2", "Nefl", "Snap25", "Meg3")
-PU1_mg <- c("Spi1", "Aif1", "C1qa", "Tmem119", "Apoe", "Dock8", "Irf8")
-SOX10_mg <- c("Sox10", "Mbp", "Mog", "Gal3st1", "S100b", "Pdgfra", "Cnp", "Stx6")
-SOX2_mg <- c("Sox2", "Sox9", "Gfap", "Atp1b2", "Slc1a3", "Slc1a2", "Apoe", "Prnp" )
-
-# Create a named list of markers by cell type:
-markers <- list(neurons = NeuN_mg, microglia = PU1_mg, oligos = SOX10_mg, astrocytes = SOX2_mg)
 
 # generate dataframes from the qlfTest objects
-NeuN_de <- data.frame(qlf.NeuN$table)
-PU1_de <- data.frame(qlf.PU1$table)
-SOX10_de <- data.frame(qlf.SOX10$table)
-SOX2_de <- data.frame(qlf.SOX2$table)
+NeuN_qlfTest <- data.frame(qlf.NeuN$table)
+PU1_qlfTest <- data.frame(qlf.PU1$table)
+SOX10_qlfTest <- data.frame(qlf.SOX10$table)
+SOX2_qlfTest <- data.frame(qlf.SOX2$table)
 
-# make the plots
-NeuN_volcano <- PlotVolcanoMarkers(NeuN_de, markers, title = "NeuN+ vs. non-NeuN")
-PU1_volcano <- PlotVolcanoMarkers(PU1_de, markers, title = "PU1+ vs. non-PU1")
-SOX10_genes <-  PlotVolcanoMarkers(SOX10_de, markers,  title = "SOX10+ vs. non-NeuN averages")
-SOX2_genes <- PlotVolcanoMarkers(SOX2_de, markers, title = "SOX2+ vs. non-SOX2 averages")
+# Create vector of top genes to plot as labels
+topNeuN <- rownames(topTags(qlf.NeuN, n = 25, sort.by = "PValue"))
+topPU1 <- rownames(topTags(qlf.PU1, n = 25, sort.by = "PValue"))
+topSOX10 <- rownames(topTags(qlf.SOX10, n = 25, sort.by = "PValue"))
+topSOX2 <- rownames(topTags(qlf.SOX2, n = 25, sort.by = "PValue"))
+
+# generate dataframes for the Treat test objects
+NeuN_treat <- data.frame(treat.NeuN$table)
+PU1_treat <-  data.frame(treat.NeuN$table)
+SOX10_treat <- data.frame(treat.SOX10$table)
+SOX2_treat <- data.frame(treat.PU1$table)
+
+
+# set log2FC threshold to draw on plots.
+threshold= 2
+
+
+# Define marker genes
+# vectors of canonical marker genes for each cell type
+NeuN_mg <- c("Rbfox3", "Eno2", "Nefl", "Snap25", "Meg3", "Elavl3", "Tubb3", "Map2", "Mapt")
+PU1_mg <- c("Spi1", "Aif1", "C1qa", "Tmem119", "Apoe", "Dock8", "Irf8")
+SOX10_mg <- c("Sox10", "Mbp", "Mog", "Gal3st1", "S100b", "Pdgfra", "Cnp")
+SOX2_mg <- c("Sox2", "Sox9", "Gfap", "Atp1b2", "Slc1a3", "Slc1a2")
+multiple <- c("Prnp", "Apoe", "Stx6")
+
+# Create a named list of markers by cell type:
+markers <- list(neurons = NeuN_mg, microglia = PU1_mg, oligos = SOX10_mg, astrocytes = SOX2_mg, multiple = multiple)
+
+NeuN_volcano <- PlotVolcano(NeuN_qlfTest,selectLab = topNeuN, FCcutoff = 2, title = "NeuN vs. Avg of Others")
+PU1_volcano <- PlotVolcano(PU1_qlfTest, selectLab = topPU1, FCcutoff = 2, title = "PU1 vs. Avg of Others")
+SOX10_volcano <- PlotVolcano(SOX10_qlfTest, selectLab = topSOX10, FCcutoff = 2, title = "SOX10 vs. Avg of Others")
+SOX2_volcano <- PlotVolcano(SOX2_qlfTest, selectLab = topSOX2, FCcutoff = 2, title = "SOX2 vs. Avg of Others")
+
+
+NeuN_marker_volcano <- MarkerGeneVolcano(NeuN_qlfTest, markers, title = "NeuN vs. Avg of Others")
+PU1_marker_volcano <- MarkerGeneVolcano(PU1_qlfTest, markers, title = "PU1 vs. Avg of Others")
+SOX10_marker_volcano <- MarkerGeneVolcano(SOX10_qlfTest, markers, title = "SOX10 vs. Avg of Others")
+SOX2_marker_volcano <- MarkerGeneVolcano(SOX2_qlfTest, markers, title = "SOX2 vs. Avg of Others")
+
+ggsave(filename = "plots/NeuN_marker_volcano.png", plot = NeuN_marker_volcano, width = 10, height = 10, dpi = 300)
+ggsave(filename = "plots/PU1_marker_volcano.png", plot = PU1_marker_volcano, width = 10, height = 10, dpi = 300)
+ggsave(filename = "plots/SOX10_marker_volcano.png", plot = SOX10_marker_volcano, width = 10, height = 10, dpi = 300)
+ggsave(filename = "plots/SOX2_marker_volcano.png", plot = SOX2_marker_volcano, width = 10, height = 10, dpi = 300)
 
 ################################
 #### Export DE analysis data ###
 ################################
-
+# raw csvs
 dir.create("output")
 write.csv(x = NeuN_de, file = "output/FANS_pilot_NeuN_DE_genes.csv")
 write.csv(x = PU1_de, file =  "output/FANS_pilot_PU1_DE_genes.csv")

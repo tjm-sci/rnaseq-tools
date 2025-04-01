@@ -90,6 +90,7 @@ for r1 in "${FASTQ_DIR}"/*_R1*.fastq*; do
     --seqBias \
     --gcBias \
     --threads "$THREADS" \
+    --softclip \
     -o "$sample_output"
 
 
