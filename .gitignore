@@ -1,5 +1,5 @@
 .RData
-Rhistory
+.Rhistory
 .Rproj.user/
 250331_reference_seqs/
 FANS_PILOT_DEV.Rproj
@@ -11,8 +11,10 @@ plots/
 qc/
 reference_seqs/
 salmon/
-scripts/RNAseqQC_config_tom.sh
-scripts/fastp_config_tom.sh
-scripts/salmon_config_new.sh
-scripts/salmon_config_tom.sh
-star/
+star
+scripts/qc/RNAseqQC_config_tom.sh
+scripts/fastp/fastp_config_tom.sh
+scripts/salmon/salmon_config_new.sh
+scripts/salmon/salmon_config_tom.sh
+FANS_PILOT_DEV/star/
+.RHistory
